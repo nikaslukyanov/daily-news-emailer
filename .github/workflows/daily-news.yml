@@ -1,0 +1,56 @@
+name: Daily News Email
+
+# When to run this workflow
+on:
+  # Run automatically every day
+  schedule:
+    - cron: '0 13 * * *'
+  
+  # Allow manual triggering from GitHub UI
+  workflow_dispatch:
+
+jobs:
+  send-daily-news:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Check out your code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # Step 2: Set up Python
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+      
+      # Step 4: Run the news emailer script
+      - name: Send daily news email
+        env:
+          # Pull secrets from GitHub Secrets
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SMTP_SERVER: smtp.gmail.com
+          SMTP_PORT: 587
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
+        run: python daily_news_emailer_FREE_PRODUCTION.py
+      
+      # Step 5: Upload logs as artifact (optional - for debugging)
+      - name: Upload logs
+        if: always()  # Run even if previous step fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: news-logs-${{ github.run_number }}
+          path: |
+            *.log
+            news_preview.html
+          retention-days: 7
