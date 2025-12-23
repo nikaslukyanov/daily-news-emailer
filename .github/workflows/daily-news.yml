@@ -42,7 +42,7 @@ jobs:
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
-        run: python daily_news_emailer_FREE_PRODUCTION.py
+        run: python daily_news_emailer.py
       
       # Step 5: Upload logs as artifact (optional - for debugging)
       - name: Upload logs
