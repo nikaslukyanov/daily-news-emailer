@@ -7,13 +7,17 @@ import requests
 import json
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, date
 import asyncio
 
 import ssl
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+import http.client, urllib.parse
+
+from newsdataapi import NewsDataApiClient
 
 
 from dotenv import load_dotenv
@@ -24,17 +28,18 @@ RSS_FEEDS = [
     "https://rss.nytimes.com/services/xml/rss/nyt/US.xml",
     "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
     "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness",
+    "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain"
+    "https://feeds.npr.org/1004/rss.xml"
 ]
 
-async def fetch_news_from_rss() -> List[Dict]:
-    """Fetch latest news articles from NYT and WSJ RSS feeds"""
+async def fetch_news_from_raw_rss() -> List[Dict]:
     articles = []
 
     try: 
         for feed_url in RSS_FEEDS:
             feed = feedparser.parse(feed_url)
 
-            for entry in feed.entries[:5]:
+            for entry in feed.entries:
                 articles.append({
                     "title": entry.get("title", "Untitled"),
                     "description": entry.get("summary", entry.get("description", "")),
@@ -46,6 +51,62 @@ async def fetch_news_from_rss() -> List[Dict]:
             logging.info("RSS request complete")
     except Exception as e:
         logging.info(f"Error: RSS request incomplete: {e}")
+    return articles
+
+async def fetch_news_from_news_api() -> List[Dict]:
+    articles = []
+
+    try: 
+        API_KEY = os.environ.get("NEWSDATAIO_API_KEY")
+
+        # API key authorization, Initialize the client with your API key
+        api = NewsDataApiClient(apikey=API_KEY)
+
+        # You can pass empty or with request parameters (ex. country = "us")
+
+        response = api.latest_api(country='us',category='technology,business',language='en',
+                                  sort='relevancy',domainurl='nytimes.com,bbc.com',scroll=True,paginate=True)
+
+        print(response)
+
+
+        
+        # api_key = os.environ.get("MEDIASTACK_API_KEY")
+        # date = datetime.now().strftime("%Y-%m-%d")
+
+        # yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+        # conn = http.client.HTTPConnection('api.mediastack.com')
+
+        # params = urllib.parse.urlencode({
+        #     'access_key': api_key,
+        #     # 'categories': 'general',
+        #     'sort': 'popularity',
+        #     'sources': 'nyt',
+        #     'date': yesterday, 
+        #     'limit': 25,
+        #     })
+
+        # conn.request('GET', '/v1/news?{}'.format(params))
+
+        # res = conn.getresponse()
+        # data = res.read()
+
+        # print(data.decode('utf-8'))
+
+        #         # articles.append({
+        #         #     "title": entry.get("title", "Untitled"),
+        #         #     "description": entry.get("summary", entry.get("description", "")),
+        #         #     "url": entry.get("link", ""),
+        #         #     "source": {"name": feed.feed.get("title", "RSS Feed")},
+        #         #     "publishedAt": entry.get("published", ""),
+        #         #     "author": entry.get("author", "Unknown")
+        #         # })
+        #     # logging.info("RSS request complete")
+    except Exception as e:
+        logging.info(f"Error: News API request incomplete: {e}")
+
     return articles
 
 def generate_summary_with_claude(articles: List[Dict]) -> str:
@@ -67,12 +128,12 @@ def generate_summary_with_claude(articles: List[Dict]) -> str:
             {articles}
 
             Format as an HTML email with:
-            1. Brief introduction
-            2. Pick 10 key stories grouped by theme 
-            3. For each story: headline, 2-4 sentence summary, link
-            4. Professional but friendly tone
-            5. Keep the title emoji free 
-
+            1. No introduction or conclusion.
+            2. Keep the title emoji free  
+            3. Pick at most 10 key stories grouped by theme 
+            4. For each story: headline, 2-4 sentence summary, link
+            5. Professional but friendly tone
+            
             Keep under 500 words."""
     
     try:
@@ -149,12 +210,13 @@ def send_email(subject: str, html_content: str):
         
 
 async def main():
-    articles = await fetch_news_from_rss()
-    summary = generate_summary_with_claude(articles)
+    # articles = await fetch_news_from_raw_rss()
+    # summary = generate_summary_with_claude(articles)
 
-    date = datetime.now().strftime("%d/%m/%Y")
-    subject = f"[URGENT] Daily News for {date}"
-    success = send_email(subject, summary)
+    # date = datetime.now().strftime("%d/%m/%Y")
+    # subject = f"[URGENT] Daily News for {date}"
+    # success = send_email(subject, summary)
+    articles = await fetch_news_from_news_api()
 
 if __name__ == "__main__":
     asyncio.run(main())
