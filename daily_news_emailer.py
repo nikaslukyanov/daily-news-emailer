@@ -152,11 +152,9 @@ async def main():
     articles = await fetch_news_from_rss()
     summary = generate_summary_with_claude(articles)
 
-    date = datetime.date.today()
-    subject = f"Daily News - {date}"
+    date = datetime.now().strftime("%d/%m/%Y")
+    subject = f"[URGENT] Daily News for {date}"
     success = send_email(subject, summary)
-
-
 
 if __name__ == "__main__":
     asyncio.run(main())
