@@ -7,7 +7,7 @@ import requests
 import json
 import os
 import logging
-import datetime
+from datetime import datetime
 import asyncio
 
 import ssl
