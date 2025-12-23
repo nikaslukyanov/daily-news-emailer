@@ -71,7 +71,7 @@ def generate_summary_with_claude(articles: List[Dict]) -> str:
             2. Pick 10 key stories grouped by theme 
             3. For each story: headline, 2-4 sentence summary, link
             4. Professional but friendly tone
-
+            5. Keep the title emoji free 
 
             Keep under 500 words."""
     
