@@ -189,7 +189,7 @@ def send_email(subject: str, html_content: str):
         msg['Subject'] = subject
         msg['From'] = EMAIL_FROM
         msg['To'] = EMAIL_TO
-        msg['Date'] = str(datetime.date.today())
+        msg['Date'] = str(datetime.now().strftime("%Y-%m-%d"))
 
         html_part = MIMEText(html_content, 'html')
         msg.attach(html_part)
