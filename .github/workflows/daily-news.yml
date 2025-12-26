@@ -28,20 +28,21 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests feedparser python-dotenv
-      
+          pip install requests feedparser python-dotenv huggingface-hub openai
+
       # Step 4: Run the news emailer script
       - name: Send daily news email
         env:
           # Pull secrets from GitHub Secrets
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          HF_KEY: ${{ secrets.HF_KEY }}
+          NEWSDATAIO_API_KEY: ${{ secrets.NEWSDATAIO_API_KEY }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           SMTP_SERVER: smtp.gmail.com
           SMTP_PORT: 587
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
         run: python daily_news_emailer.py
       
       # Step 5: Upload logs as artifact (optional - for debugging)

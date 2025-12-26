@@ -66,7 +66,7 @@ def generate_summary_with_huggingface(articles: List[Dict]) -> str:
         html_content = html_content.strip()
 
         if not html_content:
-            logging.error(f"No content generated. Response: {result}")
+            logging.error(f"No content generated. Response: {html_content}")
             return 
 
         # Clean up markdown code fences if present
