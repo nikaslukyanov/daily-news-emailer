@@ -7,7 +7,7 @@ import requests
 import json
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, date
 import asyncio
 
 import ssl
@@ -15,26 +15,37 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+import http.client, urllib.parse
+
+from newsdataapi import NewsDataApiClient
+from huggingface_summarizer import generate_summary_with_huggingface
+
 
 from dotenv import load_dotenv
 load_dotenv() # Load the variables
 
+# Configure logging to show in GitHub Actions
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 RSS_FEEDS = [
     "https://rss.nytimes.com/services/xml/rss/nyt/US.xml",
     "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
     "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness",
+    "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain"
+    "https://feeds.npr.org/1004/rss.xml"
 ]
 
-async def fetch_news_from_rss() -> List[Dict]:
-    """Fetch latest news articles from NYT and WSJ RSS feeds"""
+async def fetch_news_from_raw_rss() -> List[Dict]:
     articles = []
 
     try: 
         for feed_url in RSS_FEEDS:
             feed = feedparser.parse(feed_url)
 
-            for entry in feed.entries[:5]:
+            for entry in feed.entries:
                 articles.append({
                     "title": entry.get("title", "Untitled"),
                     "description": entry.get("summary", entry.get("description", "")),
@@ -45,7 +56,57 @@ async def fetch_news_from_rss() -> List[Dict]:
                 })
             logging.info("RSS request complete")
     except Exception as e:
-        logging.info(f"Error: RSS request incomplete: {e}")
+        logging.error(f"Error: RSS request incomplete: {e}")
+    return articles
+
+async def fetch_news_from_news_api() -> List[Dict]:
+    articles = []
+
+    try:
+        API_KEY = os.environ.get("NEWSDATAIO_API_KEY")
+
+        if not API_KEY:
+            logging.error("NEWSDATAIO_API_KEY not found in environment variables!")
+            return articles
+
+        # Define link list AFTER getting API_KEY
+        link_list = [
+            f"https://newsdata.io/api/1/market?apikey={API_KEY}&q=market&language=en&domainurl=wsj.com,economist.com,bloomberg.com,ft.com,cnbc.com&sort=relevancy",
+            f"https://newsdata.io/api/1/latest?apikey={API_KEY}&q=politics&language=en&domainurl=nytimes.com,wsj.com,theguardian.com,aljazeera.com&sort=relevancy"
+        ]
+
+        logging.info(f"Fetching news from {len(link_list)} API endpoints...")
+
+        for i, url in enumerate(link_list, 1):
+            logging.info(f"[{i}/{len(link_list)}] Fetching from NewsData API...")
+            response = requests.get(url)
+            data = response.json()
+
+            # Check if request was successful
+            if data.get('status') == 'success' and 'results' in data:
+                count = len(data['results'])
+                logging.info(f"Fetched {count} articles from endpoint {i}")
+
+                # Parse each article from the response
+                for item in data['results']:
+                    articles.append({
+                        "title": item.get("title", "Untitled"),
+                        "description": item.get("description", ""),
+                        "url": item.get("link", ""),
+                        "source": {"name": item.get("source_id", "Unknown")},
+                        "publishedAt": item.get("pubDate", ""),
+                        "author": item.get("creator", ["Unknown"])[0] if item.get("creator") else "Unknown"
+                    })
+            else:
+                logging.error(f"No results from endpoint {i}. Status: {data.get('status', 'unknown')}")
+                if 'message' in data:
+                    logging.error(f"API message: {data['message']}")
+
+        logging.info(f"Total articles collected: {len(articles)}")
+
+    except Exception as e:
+        logging.error(f"Error: News API request incomplete: {e}")
+    
     return articles
 
 def generate_summary_with_claude(articles: List[Dict]) -> str:
@@ -67,12 +128,13 @@ def generate_summary_with_claude(articles: List[Dict]) -> str:
             {articles}
 
             Format as an HTML email with:
-            1. Brief introduction
-            2. Pick 10 key stories grouped by theme 
-            3. For each story: headline, 2-4 sentence summary, link
-            4. Professional but friendly tone
-            5. Keep the title emoji free 
-
+            1. No introduction or conclusion.
+            2. Keep the title emoji free  
+            3. Pick at most 15 key stories grouped by theme. Make no more than 4 themes. 
+            4. Make sure that politics and markets are discussed. 
+            4. For each story: headline, 2-4 sentence summary, link
+            5. Professional but friendly tone
+            
             Keep under 500 words."""
     
     try:
@@ -114,7 +176,7 @@ def generate_summary_with_claude(articles: List[Dict]) -> str:
         return html_content
     
     except Exception as e:
-       logging.info(f"Error calling LLM: {e}")
+       logging.error(f"Error calling LLM: {e}")
 
 def send_email(subject: str, html_content: str):
     EMAIL_TO = os.environ.get("EMAIL_TO", "")
@@ -128,7 +190,7 @@ def send_email(subject: str, html_content: str):
         msg['Subject'] = subject
         msg['From'] = EMAIL_FROM
         msg['To'] = EMAIL_TO
-        msg['Date'] = str(datetime.date.today())
+        msg['Date'] = str(datetime.now().strftime("%Y-%m-%d"))
 
         html_part = MIMEText(html_content, 'html')
         msg.attach(html_part)
@@ -140,20 +202,25 @@ def send_email(subject: str, html_content: str):
             server.sendmail(
                 EMAIL_FROM, EMAIL_TO, msg.as_string()
             )
-        print(f"✅ Email sent successfully to {EMAIL_TO}")
+        logging.info(f"Email sent successfully to {EMAIL_TO}")
         return True
     
     except Exception as e:
-        print(f"❌ Error sending email: {e}")
+        logging.error(f"Error sending email: {e}")
         return False
         
 
 async def main():
-    articles = await fetch_news_from_rss()
-    summary = generate_summary_with_claude(articles)
+    articles = await fetch_news_from_news_api()
+    summary = generate_summary_with_huggingface(articles)
+
+    # Fallback to Claude if Hugging Face fails
+    if not summary or "Error" in summary:
+        logging.warning("Error in HF: Fall back on Claude")
+        summary = generate_summary_with_claude(articles)
 
     date = datetime.now().strftime("%d/%m/%Y")
-    subject = f"[URGENT] Daily News for {date}"
+    subject = f"Daily News for {date}"
     success = send_email(subject, summary)
 
 if __name__ == "__main__":
