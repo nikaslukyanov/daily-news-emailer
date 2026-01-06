@@ -14,16 +14,20 @@ def generate_summary_with_huggingface(articles: List[Dict]) -> str:
     """Generate summary using Hugging Face Inference API (Free!)"""
 
     # Prepare articles text
-    if articles: 
-        articles_text = "\n\n".join([
-            f"Article {i+1}:\n"
-            f"Title: {article['title']}\n"
-            f"Source: {article.get('source', {}).get('name', 'Unknown')}\n"
-            f"Description: {article.get('description', 'N/A')[:200]}\n"
-            f"URL: {article.get('url', '')}"
-            for i, article in enumerate(articles[:(min(20),len(articles)-1)])  # Limit to avoid context length
-        ])
-    else: 
+    if articles:
+        num_articles = articles[:min(20, len(articles))]
+
+        for i, article in enumerate(num_articles):
+            print(article)
+            if article: 
+                articles_text = "\n\n".join([
+                    f"Article {i+1}:\n"
+                    f"Title: {article.get('title', 'Untitled')}\n"
+                    f"Source: {article.get('source', {}).get('name', 'Unknown')}\n"
+                    f"Description: {article.get('description', 'N/A')}\n"
+                    f"URL: {article.get('url', '')}"
+                    ])
+    else:
         return f"No content generated: {articles}"
 
     prompt = f"""Create a concise, engaging daily news summary email.

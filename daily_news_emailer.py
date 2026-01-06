@@ -44,6 +44,7 @@ async def fetch_news_from_raw_rss() -> List[Dict]:
     try: 
         for feed_url in RSS_FEEDS:
             feed = feedparser.parse(feed_url)
+            
 
             for entry in feed.entries:
                 articles.append({
